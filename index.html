@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0D0D14">
+<title>定投追蹤 · DCA Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0D0D14;--bg2:#13131E;--bg3:#1A1A28;--bg4:#222235;
+  --gold:#F0A500;--gold-dim:rgba(240,165,0,0.12);--gold-border:rgba(240,165,0,0.3);
+  --green:#4ADE80;--green-dim:rgba(74,222,128,0.12);
+  --red:#F87171;--red-dim:rgba(248,113,113,0.12);
+  --amber:#FBBF24;--amber-dim:rgba(251,191,36,0.12);
+  --blue:#60A5FA;--blue-dim:rgba(96,165,250,0.12);
+  --text:#E2E2F0;--text2:#9090B0;--text3:#5A5A78;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --r:12px;--r-sm:8px;--r-lg:16px;
+  --font-num:'DM Mono',monospace;
+  --font-cn:'Noto Sans TC','Microsoft JhengHei',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-cn);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
+
+/* LAYOUT */
+.app{display:flex;flex-direction:column;min-height:100vh}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 1rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:8px;padding:12px 0;white-space:nowrap;flex-shrink:0}
+.logo-icon{width:28px;height:28px;background:var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:16px;height:16px}
+.logo-text{font-size:14px;font-weight:600;color:var(--text)}
+.logo-sub{font-size:11px;color:var(--text3);font-family:var(--font-num)}
+.nav{display:flex;gap:2px;overflow-x:auto;flex:1;padding:8px 0;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav-btn{background:none;border:none;color:var(--text2);font-family:var(--font-cn);font-size:13px;padding:6px 14px;border-radius:var(--r-sm);cursor:pointer;white-space:nowrap;transition:all .2s}
+.nav-btn:hover{color:var(--text);background:var(--bg3)}
+.nav-btn.active{color:var(--gold);background:var(--gold-dim)}
+.header-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.btn-icon{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);padding:6px 10px;border-radius:var(--r-sm);cursor:pointer;font-size:12px;font-family:var(--font-cn);display:flex;align-items:center;gap:5px;transition:all .2s;white-space:nowrap}
+.btn-icon:hover{color:var(--text);border-color:var(--gold-border)}
+.btn-icon svg{width:14px;height:14px;flex-shrink:0}
+.price-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.price-dot.live{background:var(--green)}
+.price-dot.loading{background:var(--amber);animation:pulse 1s infinite}
+
+/* SYNC STATUS */
+.sync-status{display:flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-num);color:var(--text3);padding:4px 10px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);white-space:nowrap}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite}
+.sync-dot.error{background:var(--red)}
+.sync-dot.off{background:var(--text3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(13,13,20,.7);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.loading-box{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:1.5rem 2rem;text-align:center}
+.spinner{width:28px;height:28px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto .75rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay.hidden{display:none}
+
+/* MAIN */
+.main{flex:1;padding:1.25rem;max-width:900px;width:100%;margin:0 auto}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* CARDS */
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem}
+.card-sm{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:.9rem 1rem}
+.card-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem;font-family:var(--font-num)}
+.card-value{font-size:22px;font-weight:500;font-family:var(--font-num);color:var(--text);line-height:1.2}
+.card-value.sm{font-size:16px}
+.card-sub{font-size:11px;color:var(--text3);margin-top:.3rem;font-family:var(--font-num)}
+
+/* GRIDS */
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1rem}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:1rem}
+
+/* TRIGGER CARDS */
+.trigger-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem;position:relative;overflow:hidden}
+.trigger-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.trigger-card.normal::before{background:var(--green)}
+.trigger-card.accelerate::before{background:var(--amber)}
+.trigger-card.big-accelerate::before{background:var(--red)}
+.trigger-card.unknown::before{background:var(--text3)}
+.trigger-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.85rem}
+.trigger-name{font-size:13px;font-weight:500;color:var(--text2)}
+.trigger-ticker{font-size:11px;color:var(--text3);font-family:var(--font-num)}
+.status-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;font-family:var(--font-num)}
+.status-badge.normal{background:var(--green-dim);color:var(--green)}
+.status-badge.accelerate{background:var(--amber-dim);color:var(--amber)}
+.status-badge.big-accelerate{background:var(--red-dim);color:var(--red)}
+.status-badge.unknown{background:var(--bg4);color:var(--text3)}
+.trigger-price-row{display:flex;gap:1.5rem;margin-bottom:.65rem}
+.trigger-price-label{font-size:10px;color:var(--text3);margin-bottom:2px;font-family:var(--font-num)}
+.trigger-price-val{font-size:16px;font-weight:500;font-family:var(--font-num);color:var(--text)}
+.trigger-change{font-size:13px;font-weight:500;font-family:var(--font-num)}
+.trigger-change.pos{color:var(--green)}
+.trigger-change.neg{color:var(--red)}
+.trigger-change.neu{color:var(--text3)}
+.trigger-bar-wrap{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-top:.75rem}
+.trigger-bar{height:100%;border-radius:2px;transition:width .5s}
+.trigger-bar.normal{background:var(--green)}
+.trigger-bar.accelerate{background:var(--amber)}
+.trigger-bar.big-accelerate{background:var(--red)}
+
+/* RECOMMENDATION */
+.rec-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:1rem}
+.rec-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+.rec-title{font-size:13px;color:var(--text2);font-weight:500}
+.rec-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.rec-item{background:var(--bg4);border-radius:var(--r-sm);padding:.75rem 1rem;text-align:center}
+.rec-item-label{font-size:10px;color:var(--text3);margin-bottom:.35rem;font-family:var(--font-num)}
+.rec-item-amount{font-size:17px;font-weight:500;font-family:var(--font-num);color:var(--gold)}
+.rec-item-sub{font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--font-num)}
+.rec-note{font-size:12px;color:var(--text3);margin-top:.85rem;padding-top:.75rem;border-top:1px solid var(--border);line-height:1.7}
+
+/* PROGRESS */
+.progress-wrap{margin-bottom:1rem}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:6px;font-family:var(--font-num)}
+.progress-track{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--gold),var(--amber));transition:width .5s}
+
+/* SECTION TITLE */
+.section-title{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin:1.25rem 0 .75rem;font-family:var(--font-num);display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:var(--bg4);color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:500;padding:8px 12px;text-align:left;white-space:nowrap;font-family:var(--font-num)}
+tbody tr{border-top:1px solid var(--border);transition:background .15s}
+tbody tr:hover{background:var(--bg4)}
+tbody td{padding:9px 12px;color:var(--text);font-family:var(--font-num);font-size:13px;white-space:nowrap}
+.td-del{color:var(--text3);cursor:pointer;transition:color .15s;background:none;border:none;font-size:15px;padding:2px 6px}
+.td-del:hover{color:var(--red)}
+.badge-trigger{font-size:10px;padding:2px 8px;border-radius:12px}
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--text3);font-size:13px}
+.empty-state .es-icon{font-size:32px;margin-bottom:.75rem;opacity:.3}
+
+/* FORMS */
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin-bottom:1rem}
+.form-group{display:flex;flex-direction:column;gap:.4rem}
+.form-group label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;font-family:var(--font-num)}
+.form-group input,.form-group select,.form-group textarea{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r-sm);color:var(--text);font-family:var(--font-num);font-size:13px;padding:8px 12px;outline:none;transition:border-color .2s;width:100%}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold-border)}
+.form-group textarea{font-family:var(--font-cn);resize:vertical;min-height:80px;font-size:13px}
+.form-group select option{background:var(--bg4)}
+.form-hint{font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--font-num)}
+.btn{border:none;border-radius:var(--r-sm);cursor:pointer;font-family:var(--font-cn);font-size:13px;font-weight:500;padding:8px 18px;transition:all .2s}
+.btn-primary{background:var(--gold);color:#000}
+.btn-primary:hover{background:#FFB800}
+.btn-secondary{background:var(--bg4);color:var(--text2);border:1px solid var(--border2)}
+.btn-secondary:hover{color:var(--text);border-color:var(--gold-border)}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(248,113,113,.25)}
+.btn-danger:hover{background:rgba(248,113,113,.2)}
+.form-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+
+/* CHART */
+.chart-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:1rem}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);font-family:var(--font-num)}
+.legend-dot{width:8px;height:8px;border-radius:2px}
+
+/* JOURNAL */
+.journal-entry{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:.75rem;transition:border-color .2s}
+.journal-entry:hover{border-color:var(--border2)}
+.je-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem}
+.je-meta{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.je-date{font-size:11px;color:var(--text3);font-family:var(--font-num)}
+.je-mood{font-size:11px;padding:2px 9px;border-radius:12px}
+.je-mood.bull{background:var(--green-dim);color:var(--green)}
+.je-mood.bear{background:var(--red-dim);color:var(--red)}
+.je-mood.neu{background:var(--bg4);color:var(--text3)}
+.je-title{font-size:14px;font-weight:500;color:var(--text);margin-bottom:.4rem}
+.je-content{font-size:13px;color:var(--text2);line-height:1.75;white-space:pre-wrap}
+.je-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:2px 4px;transition:color .15s}
+.je-del:hover{color:var(--red)}
+
+/* SETTINGS */
+.setting-group{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem 1.25rem;margin-bottom:.85rem}
+.setting-group-title{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-num);margin-bottom:.85rem}
+.setting-group.highlight{border-color:var(--gold-border);background:rgba(240,165,0,0.04)}
+.setup-steps{counter-reset:step;margin:.75rem 0}
+.setup-step{display:flex;gap:.75rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);line-height:1.6}
+.setup-step:last-child{border-bottom:none}
+.step-num{min-width:22px;height:22px;background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--gold);font-family:var(--font-num);flex-shrink:0;margin-top:1px}
+.step-done{min-width:22px;height:22px;background:var(--green-dim);border:1px solid rgba(74,222,128,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.connected-badge{display:inline-flex;align-items:center;gap:5px;background:var(--green-dim);border:1px solid rgba(74,222,128,.3);color:var(--green);font-size:12px;padding:4px 12px;border-radius:20px;font-family:var(--font-num)}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:1.5rem;right:1.5rem;z-index:1000;display:flex;flex-direction:column;gap:.5rem;pointer-events:none}
+.toast{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r-sm);padding:.7rem 1rem;font-size:13px;color:var(--text);opacity:0;transform:translateY(10px);transition:all .3s}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.success{border-color:rgba(74,222,128,.3);color:var(--green)}
+.toast.error{border-color:rgba(248,113,113,.3);color:var(--red)}
+
+/* COLLAPSIBLE */
+.collapsible-toggle{display:flex;align-items:center;gap:.5rem;width:100%;background:none;border:none;color:var(--text2);font-family:var(--font-cn);font-size:13px;cursor:pointer;padding:.5rem 0;transition:color .2s}
+.collapsible-toggle:hover{color:var(--gold)}
+.collapsible-toggle .arrow{transition:transform .3s;font-size:10px}
+.collapsible-toggle.open .arrow{transform:rotate(180deg)}
+.collapsible-body{overflow:hidden;max-height:0;transition:max-height .35s ease}
+.collapsible-body.open{max-height:700px}
+
+/* INFO NOTE */
+.info-note{background:var(--blue-dim);border:1px solid rgba(96,165,250,.2);border-radius:var(--r-sm);padding:.75rem 1rem;font-size:12px;color:#93C5FD;margin-bottom:1rem;line-height:1.6}
+.warn-note{background:var(--amber-dim);border:1px solid rgba(251,191,36,.25);border-radius:var(--r-sm);padding:.75rem 1rem;font-size:12px;color:var(--amber);margin-bottom:1rem;line-height:1.6}
+
+/* CODE BLOCK */
+.code-block{background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-sm);padding:.75rem 1rem;font-family:var(--font-num);font-size:11px;color:var(--text2);overflow-x:auto;margin:.5rem 0;line-height:1.7}
+
+@media(max-width:600px){
+  .main{padding:.9rem .85rem}
+  .header{padding:0 .85rem;gap:.5rem}
+  .logo-sub,.sync-status span:last-child{display:none}
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <div style="font-size:13px;color:var(--text2)" id="loadingMsg">從 Google Sheets 載入資料…</div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 16 16" fill="#000"><path d="M8 2L2 5v6l6 3 6-3V5L8 2zm0 1.5L13 6v4.5L8 13l-5-2.5V6L8 3.5z"/><circle cx="8" cy="8" r="2"/></svg>
+    </div>
+    <div>
+      <div class="logo-text">定投追蹤</div>
+      <div class="logo-sub">DCA Tracker</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <button class="nav-btn active" data-tab="dashboard">儀表板</button>
+    <button class="nav-btn" data-tab="records">定投記錄</button>
+    <button class="nav-btn" data-tab="journal">投資日記</button>
+    <button class="nav-btn" data-tab="settings">設定</button>
+  </nav>
+  <div class="header-right">
+    <div class="sync-status" id="syncStatus">
+      <span class="sync-dot off" id="syncDot"></span>
+      <span id="syncLabel">未連線</span>
+    </div>
+    <button class="btn-icon" id="refreshBtn" onclick="fetchPrices()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      <span>報價</span>
+      <span class="price-dot" id="priceDot"></span>
+    </button>
+  </div>
+</header>
+
+<main class="main">
+
+<!-- ==================== TAB: DASHBOARD ==================== -->
+<div class="tab-panel active" id="tab-dashboard">
+  <div class="grid-4">
+    <div class="card-sm">
+      <div class="card-label">總預算</div>
+      <div class="card-value" id="stat-total">NT$5,000,000</div>
+      <div class="card-sub">核心70% ＋ 衛星20% ＋ 現金10%</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-label">核心已投入</div>
+      <div class="card-value" id="stat-invested">NT$0</div>
+      <div class="card-sub">0050 + VOO 合計</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-label">核心剩餘</div>
+      <div class="card-value" id="stat-remaining">NT$3,500,000</div>
+      <div class="card-sub">核心預算 NT$3,500,000</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-label">進度</div>
+      <div class="card-value" id="stat-months">0 / 18月</div>
+      <div class="card-sub" id="stat-months-sub">已完成 0 次定投</div>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>核心部位投入進度</span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+
+  <div class="section-title">觸發機制儀表板</div>
+  <div class="grid-2">
+    <div class="trigger-card unknown" id="tc-0050">
+      <div class="trigger-top">
+        <div>
+          <div class="trigger-name">元大台灣50</div>
+          <div class="trigger-ticker">0050.TW · 台幣計價</div>
+        </div>
+        <span class="status-badge unknown" id="badge-0050">等待資料</span>
+      </div>
+      <div class="trigger-price-row">
+        <div><div class="trigger-price-label">現價 TWD</div><div class="trigger-price-val" id="p-0050-cur">—</div></div>
+        <div><div class="trigger-price-label">基準價</div><div class="trigger-price-val" id="p-0050-base">未設定</div></div>
+        <div><div class="trigger-price-label">距基準</div><div class="trigger-change neu" id="p-0050-chg">—</div></div>
+      </div>
+      <div class="trigger-bar-wrap"><div class="trigger-bar normal" id="bar-0050" style="width:0%"></div></div>
+    </div>
+    <div class="trigger-card unknown" id="tc-voo">
+      <div class="trigger-top">
+        <div>
+          <div class="trigger-name">Vanguard S&amp;P 500</div>
+          <div class="trigger-ticker">VOO · USD計價</div>
+        </div>
+        <span class="status-badge unknown" id="badge-voo">等待資料</span>
+      </div>
+      <div class="trigger-price-row">
+        <div><div class="trigger-price-label">現價 USD</div><div class="trigger-price-val" id="p-voo-cur">—</div></div>
+        <div><div class="trigger-price-label">基準價</div><div class="trigger-price-val" id="p-voo-base">未設定</div></div>
+        <div><div class="trigger-price-label">距基準</div><div class="trigger-change neu" id="p-voo-chg">—</div></div>
+      </div>
+      <div class="trigger-bar-wrap"><div class="trigger-bar normal" id="bar-voo" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="rec-card">
+    <div class="rec-header">
+      <span class="rec-title">📋 本月建議行動</span>
+      <span class="status-badge unknown" id="rec-badge">計算中</span>
+    </div>
+    <div class="rec-items">
+      <div class="rec-item">
+        <div class="rec-item-label">0050 建議金額</div>
+        <div class="rec-item-amount" id="rec-0050-amt">NT$120,000</div>
+        <div class="rec-item-sub" id="rec-0050-shares">— 股</div>
+      </div>
+      <div class="rec-item">
+        <div class="rec-item-label">VOO 建議金額</div>
+        <div class="rec-item-amount" id="rec-voo-amt">NT$80,000</div>
+        <div class="rec-item-sub" id="rec-voo-shares">≈ USD —</div>
+      </div>
+      <div class="rec-item">
+        <div class="rec-item-label">本月核心合計</div>
+        <div class="rec-item-amount" id="rec-total">NT$200,000</div>
+        <div class="rec-item-sub" id="rec-month-label">第 1 個月</div>
+      </div>
+    </div>
+    <div class="rec-note" id="rec-note">⚙️ 請先在「設定」頁面連接 Google Sheets，並新增第一筆定投記錄。</div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <span style="font-size:13px;font-weight:500;color:var(--text2)">📊 月投入金額 vs 累積均價</span>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#F0A500"></span>月投入(萬)</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4ADE80"></span>0050均價</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#60A5FA"></span>VOO均價</span>
+      </div>
+    </div>
+    <div style="position:relative;height:220px">
+      <canvas id="overviewChart" role="img" aria-label="月投入與累積均價趨勢圖">定期定額月投入與累積成本追蹤</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: RECORDS ==================== -->
+<div class="tab-panel" id="tab-records">
+  <button class="collapsible-toggle open" id="rec-toggle" onclick="toggleForm('rec')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+    新增定投記錄
+    <span class="arrow">▲</span>
+  </button>
+  <div class="collapsible-body open" id="rec-form-body">
+    <div class="card" style="margin-top:.5rem">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>投資日期</label>
+          <input type="date" id="f-date" />
+        </div>
+        <div class="form-group">
+          <label>0050 買入價 (TWD)</label>
+          <input type="number" id="f-p0050" step="0.01" placeholder="例：175.50" />
+          <span class="form-hint" id="hint-0050"></span>
+        </div>
+        <div class="form-group">
+          <label>0050 買入股數</label>
+          <input type="number" id="f-s0050" step="1" placeholder="自動計算" />
+        </div>
+        <div class="form-group">
+          <label>VOO 買入價 (USD)</label>
+          <input type="number" id="f-pvoo" step="0.01" placeholder="例：520.00" />
+          <span class="form-hint" id="hint-voo"></span>
+        </div>
+        <div class="form-group">
+          <label>VOO 買入股數</label>
+          <input type="number" id="f-svoo" step="0.001" placeholder="自動計算" />
+        </div>
+        <div class="form-group">
+          <label>匯率 (USD/TWD)</label>
+          <input type="number" id="f-fx" step="0.01" placeholder="例：32.50" />
+        </div>
+        <div class="form-group">
+          <label>觸發狀態</label>
+          <select id="f-trigger">
+            <option value="normal">維持原速（±15%以內）</option>
+            <option value="accelerate">加速（下跌15-25%）</option>
+            <option value="big-accelerate">大加速（下跌>25%）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>實際投入 (TWD)</label>
+          <input type="number" id="f-amount" placeholder="自動計算" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:1rem">
+        <label>備注</label>
+        <textarea id="f-note" placeholder="市況備注、特殊事件…"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="addRecord()">記錄這筆</button>
+        <button class="btn btn-secondary" onclick="calcRecord()">自動計算股數</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:1.25rem">累積統計</div>
+  <div class="grid-4">
+    <div class="card-sm"><div class="card-label">0050 累積均價</div><div class="card-value sm" id="s-0050-avg">—</div><div class="card-sub">TWD / 股</div></div>
+    <div class="card-sm"><div class="card-label">0050 持有股數</div><div class="card-value sm" id="s-0050-shares">0</div><div class="card-sub" id="s-0050-cost">總成本 NT$0</div></div>
+    <div class="card-sm"><div class="card-label">VOO 累積均價</div><div class="card-value sm" id="s-voo-avg">—</div><div class="card-sub">USD / 股</div></div>
+    <div class="card-sm"><div class="card-label">VOO 持有股數</div><div class="card-value sm" id="s-voo-shares">0</div><div class="card-sub" id="s-voo-cost">總成本 USD$0</div></div>
+  </div>
+
+  <div class="section-title">定投明細</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>日期</th><th>觸發</th>
+          <th>0050買價</th><th>0050股數</th>
+          <th>VOO買價</th><th>VOO股數</th>
+          <th>匯率</th><th>投入(TWD)</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="records-tbody">
+        <tr><td colspan="10"><div class="empty-state"><div class="es-icon">📋</div>尚無記錄</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-header"><span style="font-size:13px;font-weight:500;color:var(--text2)">月投入金額</span></div>
+    <div style="position:relative;height:180px">
+      <canvas id="monthlyChart" role="img" aria-label="每月定投金額長條圖">每月定投金額</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: JOURNAL ==================== -->
+<div class="tab-panel" id="tab-journal">
+  <button class="collapsible-toggle open" id="jrnl-toggle" onclick="toggleForm('jrnl')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    新增投資日記
+    <span class="arrow">▲</span>
+  </button>
+  <div class="collapsible-body open" id="jrnl-form-body">
+    <div class="card" style="margin-top:.5rem">
+      <div class="form-grid">
+        <div class="form-group"><label>日期</label><input type="date" id="j-date" /></div>
+        <div class="form-group"><label>標題</label><input type="text" id="j-title" placeholder="本月市況摘要" style="font-family:var(--font-cn)" /></div>
+        <div class="form-group">
+          <label>心態</label>
+          <select id="j-mood">
+            <option value="bull">📈 樂觀</option>
+            <option value="neu" selected>📊 中性</option>
+            <option value="bear">📉 謹慎</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:1rem">
+        <label>內容</label>
+        <textarea id="j-content" rows="4" placeholder="本月市況、決策依據、觀察到的指標、心情記錄…"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="addJournal()">儲存日記</button>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:1.25rem">日記列表 <span id="journal-count" style="color:var(--text3)"></span></div>
+  <div id="journal-list">
+    <div class="empty-state" id="journal-empty"><div class="es-icon">📓</div>尚無日記記錄</div>
+  </div>
+</div>
+
+<!-- ==================== TAB: SETTINGS ==================== -->
+<div class="tab-panel" id="tab-settings">
+
+  <!-- GOOGLE SHEETS 連線 -->
+  <div class="setting-group highlight" id="sheets-setup-group">
+    <div class="setting-group-title">☁️ Google Sheets 連線</div>
+
+    <!-- 未連線：顯示設定步驟 -->
+    <div id="setup-guide">
+      <div class="warn-note">尚未連接 Google Sheets。完成以下步驟後，所有裝置都能存取同一份資料。</div>
+      <div class="setup-steps">
+        <div class="setup-step">
+          <span class="step-num">1</span>
+          <span>前往 <a href="https://sheets.google.com" target="_blank">Google Sheets</a> 建立一個新試算表，命名為「定投追蹤」</span>
+        </div>
+        <div class="setup-step">
+          <span class="step-num">2</span>
+          <span>點選上方選單「擴充功能」→「Apps Script」，開啟編輯器</span>
+        </div>
+        <div class="setup-step">
+          <span class="step-num">3</span>
+          <span>刪除編輯器內的所有預設程式碼，貼上另一個下載的 <strong style="color:var(--text)">apps-script.gs</strong> 全部內容 → 點儲存（Ctrl+S）</span>
+        </div>
+        <div class="setup-step">
+          <span class="step-num">4</span>
+          <span>點右上角「部署」→「新增部署」→ 類型選「網頁應用程式」→ 執行身分：「我」→ 存取權：「所有人」→ 點「部署」</span>
+        </div>
+        <div class="setup-step">
+          <span class="step-num">5</span>
+          <span>Google 會要求授權，點「授予存取權」→ 複製「網頁應用程式網址」貼到下方欄位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 已連線：顯示連線狀態 -->
+    <div id="connected-guide" style="display:none;margin-bottom:.85rem">
+      <span class="connected-badge">✓ 已連接 Google Sheets</span>
+    </div>
+
+    <div class="form-group" style="margin-bottom:.85rem">
+      <label>Web App 網址</label>
+      <input type="url" id="cfg-webapp" placeholder="https://script.google.com/macros/s/..." style="font-size:12px" />
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveWebAppUrl()">儲存並連線</button>
+      <button class="btn btn-secondary" onclick="testConnection()">測試連線</button>
+      <button class="btn btn-secondary" onclick="syncNow()">↑↓ 立即同步</button>
+    </div>
+  </div>
+
+  <!-- 投資計劃參數 -->
+  <div class="setting-group">
+    <div class="setting-group-title">投資計劃參數</div>
+    <div class="form-grid" style="margin-bottom:.75rem">
+      <div class="form-group"><label>總預算 (TWD)</label><input type="number" id="cfg-total" value="5000000" /></div>
+      <div class="form-group"><label>核心部位比例 (%)</label><input type="number" id="cfg-core-pct" value="70" /></div>
+      <div class="form-group"><label>計劃月數</label><input type="number" id="cfg-months" value="18" /></div>
+      <div class="form-group"><label>0050 占核心 (%)</label><input type="number" id="cfg-0050-pct" value="60" /></div>
+      <div class="form-group"><label>預設匯率 (USD/TWD)</label><input type="number" id="cfg-fx" value="32.50" step="0.01" /></div>
+    </div>
+    <button class="btn btn-primary" onclick="saveSettings()">儲存設定</button>
+  </div>
+
+  <!-- 觸發機制 -->
+  <div class="setting-group">
+    <div class="setting-group-title">觸發機制說明</div>
+    <div style="font-size:13px;color:var(--text2);line-height:2">
+      <div>📍 <strong style="color:var(--text)">基準點</strong>：第一筆定投記錄的買入價格（0050 和 VOO 分別計算）</div>
+      <div>🟢 <strong style="color:var(--green)">維持原速</strong>：現價在基準點 ±15% 以內 → 每月 NT$200,000</div>
+      <div>🟡 <strong style="color:var(--amber)">加速</strong>：從基準點下跌 15–25% → 當月加倍，NT$400,000</div>
+      <div>🔴 <strong style="color:var(--red)">大加速</strong>：從基準點下跌超過 25% → 剩餘資金 6 個月投完</div>
+      <div>📈 <strong style="color:var(--text)">大漲不做任何改變</strong>：漲超過 15% 仍維持原速</div>
+    </div>
+  </div>
+
+  <!-- 資料管理 -->
+  <div class="setting-group">
+    <div class="setting-group-title">資料管理</div>
+    <div class="info-note">主要資料儲存在 Google Sheets。以下備份功能作為額外保險。</div>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="exportData()">📤 匯出 JSON 備份</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📥 匯入備份</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(this)" />
+      <button class="btn btn-danger" onclick="confirmReset()">🗑 清除所有資料</button>
+    </div>
+  </div>
+
+</div><!-- /tab-settings -->
+
+</main>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+const DEFAULT_CONFIG = {
+  totalBudget: 5_000_000,
+  corePct: 0.70,
+  planMonths: 18,
+  tw0050Pct: 0.60,
+  defaultFX: 32.50,
+  webappUrl: ''
+};
+
+// ─────────────────────────────────────────────
+// STATE（記憶體，資料來源是 Google Sheets）
+// ─────────────────────────────────────────────
+let state = {
+  records: [],
+  journal: [],
+  config:  { ...DEFAULT_CONFIG },
+  prices:  { tw0050: null, voo: null, lastUpdated: null }
+};
+
+// ─────────────────────────────────────────────
+// LOCAL CACHE（localStorage，作為離線備用）
+// ─────────────────────────────────────────────
+function saveLocalCache() {
+  try { localStorage.setItem('dca_cache_v3', JSON.stringify({ records: state.records, journal: state.journal, config: state.config })); } catch(e) {}
+}
+function loadLocalCache() {
+  try {
+    const d = localStorage.getItem('dca_cache_v3');
+    if (d) { const p = JSON.parse(d); state.records = p.records||[]; state.journal = p.journal||[]; if (p.config) Object.assign(state.config, p.config); return true; }
+  } catch(e) {}
+  return false;
+}
+
+// ─────────────────────────────────────────────
+// GOOGLE SHEETS API
+// ─────────────────────────────────────────────
+function getWebAppUrl() { return state.config.webappUrl || ''; }
+
+async function sheetsGet(action, payload) {
+  const url = getWebAppUrl();
+  if (!url) return null;
+  const params = new URLSearchParams({ action, _t: Date.now() });
+  if (payload) params.set('payload', JSON.stringify(payload));
+  try {
+    const r = await fetch(`${url}?${params}`, { redirect: 'follow', signal: AbortSignal.timeout(12000) });
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+// 寫入用同樣走 GET（避免 CORS preflight），fire-and-forget
+async function sheetsWrite(action, payload) {
+  const url = getWebAppUrl();
+  if (!url) return;
+  const params = new URLSearchParams({ action, payload: JSON.stringify(payload), _t: Date.now() });
+  try {
+    fetch(`${url}?${params}`, { redirect: 'follow', signal: AbortSignal.timeout(12000) })
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('error'));
+    setSyncStatus('syncing');
+  } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
+// SYNC
+// ─────────────────────────────────────────────
+async function syncNow() {
+  if (!getWebAppUrl()) { toast('請先設定 Web App 網址', 'error'); return; }
+  showLoading('從 Google Sheets 同步資料…');
+  setSyncStatus('syncing');
+  const data = await sheetsGet('getAll');
+  hideLoading();
+  if (!data || !data.ok) { setSyncStatus('error'); toast('同步失敗，請檢查網址是否正確', 'error'); return; }
+  state.records = (data.records || []).map(coerceRecord).sort((a,b) => new Date(a.date)-new Date(b.date));
+  state.journal = (data.journal || []).map(coerceJournal).sort((a,b) => new Date(b.date)-new Date(a.date));
+  if (data.config && typeof data.config === 'object') {
+    Object.entries(data.config).forEach(([k,v]) => { if (k !== 'webappUrl') state.config[k] = v; });
+  }
+  saveLocalCache();
+  setSyncStatus('synced');
+  loadSettingsForm();
+  updateAll();
+  toast('同步完成', 'success');
+}
+
+async function testConnection() {
+  if (!getWebAppUrl()) { toast('請先輸入並儲存 Web App 網址', 'error'); return; }
+  showLoading('測試連線中…');
+  const data = await sheetsGet('getAll');
+  hideLoading();
+  if (data && data.ok) { toast('✓ 連線成功！Sheets 已就緒', 'success'); setSyncStatus('synced'); updateConnectedUI(); }
+  else { toast('連線失敗，請重新確認網址', 'error'); setSyncStatus('error'); }
+}
+
+function setSyncStatus(status) {
+  const dot   = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  const map = { synced:['synced','已同步'], syncing:['syncing','同步中'], error:['error','同步失敗'], off:['off','未連線'] };
+  const [cls, txt] = map[status] || map.off;
+  dot.className = `sync-dot ${cls}`;
+  label.textContent = txt;
+}
+
+function updateConnectedUI() {
+  const hasUrl = !!getWebAppUrl();
+  document.getElementById('setup-guide').style.display    = hasUrl ? 'none' : 'block';
+  document.getElementById('connected-guide').style.display = hasUrl ? 'block' : 'none';
+  if (!hasUrl) setSyncStatus('off');
+}
+
+// ─────────────────────────────────────────────
+// TYPE COERCION（Sheets 回傳值可能是字串或數字）
+// ─────────────────────────────────────────────
+function coerceRecord(r) {
+  return {
+    ...r,
+    id:     Number(r.id) || String(r.id),
+    p0050:  r.p0050  !== null && r.p0050  !== '' ? Number(r.p0050)  : null,
+    s0050:  r.s0050  !== null && r.s0050  !== '' ? Number(r.s0050)  : 0,
+    pvoo:   r.pvoo   !== null && r.pvoo   !== '' ? Number(r.pvoo)   : null,
+    svoo:   r.svoo   !== null && r.svoo   !== '' ? Number(r.svoo)   : 0,
+    fx:     r.fx     !== null && r.fx     !== '' ? Number(r.fx)     : null,
+    amount: r.amount !== null && r.amount !== '' ? Number(r.amount) : 0,
+  };
+}
+function coerceJournal(j) {
+  return { ...j, id: Number(j.id) || String(j.id) };
+}
+
+// ─────────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────────
+function saveWebAppUrl() {
+  const url = document.getElementById('cfg-webapp').value.trim();
+  if (!url || !url.startsWith('https://script.google.com')) { toast('請輸入有效的 Google Apps Script 網址', 'error'); return; }
+  state.config.webappUrl = url;
+  saveLocalCache();
+  updateConnectedUI();
+  toast('網址已儲存，開始測試連線…');
+  testConnection();
+}
+
+function saveSettings() {
+  const cfg = {
+    totalBudget: parseFloat(document.getElementById('cfg-total').value)    || DEFAULT_CONFIG.totalBudget,
+    corePct:    (parseFloat(document.getElementById('cfg-core-pct').value) || 70) / 100,
+    planMonths:  parseInt(document.getElementById('cfg-months').value)      || 18,
+    tw0050Pct:  (parseFloat(document.getElementById('cfg-0050-pct').value) || 60) / 100,
+    defaultFX:   parseFloat(document.getElementById('cfg-fx').value)        || 32.50,
+    webappUrl:   state.config.webappUrl
+  };
+  Object.assign(state.config, cfg);
+  saveLocalCache();
+  sheetsWrite('saveConfig', cfg);
+  updateAll();
+  toast('設定已儲存', 'success');
+}
+
+function loadSettingsForm() {
+  const c = state.config;
+  document.getElementById('cfg-total').value    = c.totalBudget;
+  document.getElementById('cfg-core-pct').value = Math.round(c.corePct * 100);
+  document.getElementById('cfg-months').value   = c.planMonths;
+  document.getElementById('cfg-0050-pct').value = Math.round(c.tw0050Pct * 100);
+  document.getElementById('cfg-fx').value       = c.defaultFX;
+  document.getElementById('cfg-webapp').value   = c.webappUrl || '';
+}
+
+// ─────────────────────────────────────────────
+// DERIVED CONFIG
+// ─────────────────────────────────────────────
+function getConfig() {
+  const c = state.config;
+  const coreBudget  = c.totalBudget * c.corePct;
+  const monthlyBase = Math.round(coreBudget / c.planMonths);
+  const monthly0050 = Math.round(monthlyBase * c.tw0050Pct);
+  const monthlyVOO  = monthlyBase - monthly0050;
+  return { ...c, coreBudget, monthlyBase, monthly0050, monthlyVOO };
+}
+
+// ─────────────────────────────────────────────
+// PRICE FETCHING
+// ─────────────────────────────────────────────
+async function fetchPrices() {
+  const dot = document.getElementById('priceDot');
+  const btn = document.getElementById('refreshBtn');
+  dot.className = 'price-dot loading';
+  btn.style.opacity = '.6'; btn.style.pointerEvents = 'none';
+  try {
+    const [r0050, rvoo] = await Promise.allSettled([fetchYahoo('0050.TW'), fetchYahoo('VOO')]);
+    let updated = false;
+    if (r0050.status === 'fulfilled' && r0050.value) { state.prices.tw0050 = r0050.value; updated = true; }
+    if (rvoo.status  === 'fulfilled' && rvoo.value)  { state.prices.voo   = rvoo.value;   updated = true; }
+    if (updated) { state.prices.lastUpdated = new Date().toISOString(); dot.className = 'price-dot live'; toast('報價更新成功', 'success'); }
+    else { dot.className = 'price-dot'; toast('無法取得報價，請手動輸入', 'error'); }
+  } catch(e) { dot.className = 'price-dot'; }
+  btn.style.opacity = ''; btn.style.pointerEvents = '';
+  updateAll();
+}
+async function fetchYahoo(ticker) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) { const d = await r.json(); return d.chart?.result?.[0]?.meta?.regularMarketPrice || null; }
+  } catch(e) {}
+  try {
+    const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const w = await r.json(); const d = JSON.parse(w.contents); return d.chart?.result?.[0]?.meta?.regularMarketPrice || null; }
+  } catch(e) {}
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// TRIGGER CALCULATIONS
+// ─────────────────────────────────────────────
+function getBaseline(stock) {
+  if (!state.records.length) return null;
+  const sorted = [...state.records].sort((a,b) => new Date(a.date)-new Date(b.date));
+  return stock === '0050' ? sorted[0].p0050 : sorted[0].pvoo;
+}
+function getTrigger(cur, base) {
+  if (!base || !cur) return { status: 'unknown', pct: null };
+  const pct = (cur - base) / base * 100;
+  let status = 'normal';
+  if (pct <= -25) status = 'big-accelerate';
+  else if (pct <= -15) status = 'accelerate';
+  return { status, pct };
+}
+function getMonthlyPlan() {
+  const cfg      = getConfig();
+  const t0050    = getTrigger(state.prices.tw0050, getBaseline('0050'));
+  const tVOO     = getTrigger(state.prices.voo,   getBaseline('voo'));
+  const priority = { 'big-accelerate':3, 'accelerate':2, 'normal':1, 'unknown':0 };
+  const dominant = priority[t0050.status] >= priority[tVOO.status] ? t0050.status : tVOO.status;
+  const invested  = getCoreInvested();
+  const remaining = Math.max(0, cfg.coreBudget - invested);
+  let monthly, reason;
+  if (dominant === 'big-accelerate') { monthly = Math.round(remaining / 6); reason = '🔴 大加速：剩餘資金6個月投完'; }
+  else if (dominant === 'accelerate') { monthly = cfg.monthlyBase * 2; reason = '🟡 加速：當月加倍投入'; }
+  else if (dominant === 'unknown') { monthly = cfg.monthlyBase; reason = '⚙️ 尚無基準點，以預設金額計算'; }
+  else { monthly = cfg.monthlyBase; reason = '🟢 維持原速：市場波動在 ±15% 以內'; }
+  const monthly0050 = Math.round(monthly * cfg.tw0050Pct);
+  const monthlyVOO  = monthly - monthly0050;
+  const fx = cfg.defaultFX;
+  return { dominant, monthly, monthly0050, monthlyVOO, vooUSD: monthlyVOO / fx, reason,
+    monthLabel: `第 ${state.records.length + 1} 個月 / 共 ${cfg.planMonths} 月` };
+}
+function getCoreInvested() { return state.records.reduce((s,r) => s + (r.amount||0), 0); }
+function getAvgPrices() {
+  let c0 = 0, s0 = 0, cV = 0, sV = 0;
+  state.records.forEach(r => {
+    if (r.s0050 && r.p0050) { c0 += r.s0050 * r.p0050; s0 += r.s0050; }
+    if (r.svoo  && r.pvoo)  { cV += r.svoo  * r.pvoo;  sV += r.svoo;  }
+  });
+  return { avg0050: s0 ? c0/s0 : null, shares0050: s0, cost0050TWD: c0,
+           avgVOO:  sV ? cV/sV : null, sharesVOO:  sV, costVOOUSD: cV };
+}
+
+// ─────────────────────────────────────────────
+// ADD / DELETE
+// ─────────────────────────────────────────────
+async function addRecord() {
+  const date    = document.getElementById('f-date').value;
+  const p0050   = parseFloat(document.getElementById('f-p0050').value) || null;
+  const s0050   = parseFloat(document.getElementById('f-s0050').value) || 0;
+  const pvoo    = parseFloat(document.getElementById('f-pvoo').value)  || null;
+  const svoo    = parseFloat(document.getElementById('f-svoo').value)  || 0;
+  const fx      = parseFloat(document.getElementById('f-fx').value)    || state.config.defaultFX;
+  const trigger = document.getElementById('f-trigger').value;
+  const note    = document.getElementById('f-note').value.trim();
+  const amount  = parseFloat(document.getElementById('f-amount').value) || 0;
+  if (!date || (!p0050 && !pvoo)) { toast('請填入日期和至少一檔的買入價格', 'error'); return; }
+  const record = { id: Date.now(), date, p0050, s0050, pvoo, svoo, fx, trigger, amount, note };
+  state.records.push(record);
+  state.records.sort((a,b) => new Date(a.date)-new Date(b.date));
+  saveLocalCache();
+  sheetsWrite('addRecord', record);
+  clearRecordForm();
+  updateAll();
+  toast('記錄已儲存，同步中…', 'success');
+}
+
+function deleteRecord(id) {
+  if (!confirm('確定刪除這筆記錄？')) return;
+  state.records = state.records.filter(r => String(r.id) !== String(id));
+  saveLocalCache();
+  sheetsWrite('deleteRecord', { id });
+  updateAll();
+  toast('記錄已刪除');
+}
+
+function calcRecord() {
+  const p0050   = parseFloat(document.getElementById('f-p0050').value);
+  const pvoo    = parseFloat(document.getElementById('f-pvoo').value);
+  const fx      = parseFloat(document.getElementById('f-fx').value) || state.config.defaultFX;
+  const trigger = document.getElementById('f-trigger').value;
+  const cfg     = getConfig();
+  let monthly   = cfg.monthlyBase;
+  if (trigger === 'accelerate') monthly *= 2;
+  else if (trigger === 'big-accelerate') monthly = Math.round(Math.max(0, cfg.coreBudget - getCoreInvested()) / 6);
+  const amt0050 = Math.round(monthly * cfg.tw0050Pct);
+  const amtVOO  = monthly - amt0050;
+  if (p0050) document.getElementById('f-s0050').value = Math.floor(amt0050 / p0050);
+  if (pvoo && fx) document.getElementById('f-svoo').value = ((amtVOO / fx) / pvoo).toFixed(3);
+  document.getElementById('f-amount').value = monthly;
+  toast('已自動計算建議股數');
+}
+
+function clearRecordForm() {
+  ['f-p0050','f-s0050','f-pvoo','f-svoo','f-note','f-amount'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('f-trigger').value = 'normal';
+  document.getElementById('f-date').value = todayStr();
+}
+
+async function addJournal() {
+  const date    = document.getElementById('j-date').value;
+  const title   = document.getElementById('j-title').value.trim();
+  const content = document.getElementById('j-content').value.trim();
+  const mood    = document.getElementById('j-mood').value;
+  if (!date || !title) { toast('請填入日期和標題', 'error'); return; }
+  const entry = { id: Date.now(), date, title, content, mood };
+  state.journal.unshift(entry);
+  saveLocalCache();
+  sheetsWrite('addJournal', entry);
+  document.getElementById('j-title').value   = '';
+  document.getElementById('j-content').value = '';
+  renderJournal();
+  toast('日記已儲存', 'success');
+}
+
+function deleteJournal(id) {
+  if (!confirm('確定刪除這篇日記？')) return;
+  state.journal = state.journal.filter(j => String(j.id) !== String(id));
+  saveLocalCache();
+  sheetsWrite('deleteJournal', { id });
+  renderJournal();
+  toast('日記已刪除');
+}
+
+// ─────────────────────────────────────────────
+// DATA MANAGEMENT
+// ─────────────────────────────────────────────
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `dca-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('備份已下載', 'success');
+}
+function importData(input) {
+  const file   = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (d.records !== undefined) {
+        state.records = d.records || [];
+        state.journal = d.journal || [];
+        if (d.config) Object.assign(state.config, d.config);
+        saveLocalCache();
+        loadSettingsForm();
+        updateAll();
+        toast(`匯入成功！${state.records.length} 筆記錄`, 'success');
+        if (getWebAppUrl()) syncNow();
+      } else { toast('格式錯誤', 'error'); }
+    } catch { toast('無法解析檔案', 'error'); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+function confirmReset() {
+  if (!confirm('確定要清除本機所有記錄？此操作不會影響 Google Sheets 內的資料。')) return;
+  state.records = []; state.journal = [];
+  saveLocalCache();
+  updateAll();
+  toast('本機快取已清除');
+}
+
+// ─────────────────────────────────────────────
+// RENDER: DASHBOARD
+// ─────────────────────────────────────────────
+function renderDashboard() {
+  const cfg      = getConfig();
+  const invested  = getCoreInvested();
+  const remaining = Math.max(0, cfg.coreBudget - invested);
+  const progress  = Math.min(100, (invested / cfg.coreBudget) * 100);
+  document.getElementById('stat-total').textContent     = fmtTWD(cfg.totalBudget);
+  document.getElementById('stat-invested').textContent  = fmtTWD(invested);
+  document.getElementById('stat-remaining').textContent = fmtTWD(remaining);
+  document.getElementById('stat-months').textContent    = `${state.records.length} / ${cfg.planMonths}月`;
+  document.getElementById('stat-months-sub').textContent = `已完成 ${state.records.length} 次定投`;
+  document.getElementById('prog-pct').textContent       = progress.toFixed(1) + '%';
+  document.getElementById('prog-fill').style.width      = progress + '%';
+
+  const t0050 = getTrigger(state.prices.tw0050, getBaseline('0050'));
+  const tVOO  = getTrigger(state.prices.voo,   getBaseline('voo'));
+  renderTriggerCard('0050', state.prices.tw0050, getBaseline('0050'), t0050);
+  renderTriggerCard('voo',  state.prices.voo,    getBaseline('voo'),  tVOO);
+
+  const plan = getMonthlyPlan();
+  document.getElementById('rec-badge').className    = `status-badge ${plan.dominant}`;
+  document.getElementById('rec-badge').textContent  = triggerLabel(plan.dominant);
+  document.getElementById('rec-0050-amt').textContent = fmtTWD(plan.monthly0050);
+  document.getElementById('rec-voo-amt').textContent  = fmtTWD(plan.monthlyVOO);
+  document.getElementById('rec-total').textContent    = fmtTWD(plan.monthly);
+  document.getElementById('rec-month-label').textContent = plan.monthLabel;
+  document.getElementById('rec-0050-shares').textContent = state.prices.tw0050
+    ? `≈ ${Math.floor(plan.monthly0050 / state.prices.tw0050)} 股` : '需要現價';
+  document.getElementById('rec-voo-shares').textContent = `≈ USD ${plan.vooUSD.toFixed(0)}`;
+  document.getElementById('rec-note').textContent = plan.reason;
+}
+
+function renderTriggerCard(stock, cur, base, t) {
+  const id  = stock === '0050' ? '0050' : 'voo';
+  document.getElementById(`tc-${id}`).className             = `trigger-card ${t.status}`;
+  document.getElementById(`badge-${id}`).className          = `status-badge ${t.status}`;
+  document.getElementById(`badge-${id}`).textContent        = triggerLabel(t.status);
+  document.getElementById(`p-${id}-cur`).textContent        = cur  ? fmtNum(cur)  : '—';
+  document.getElementById(`p-${id}-base`).textContent       = base ? fmtNum(base) : '未設定';
+  const chgEl = document.getElementById(`p-${id}-chg`);
+  const barEl = document.getElementById(`bar-${id}`);
+  if (t.pct !== null) {
+    chgEl.textContent = (t.pct >= 0 ? '+' : '') + t.pct.toFixed(2) + '%';
+    chgEl.className   = `trigger-change ${t.pct > 0 ? 'pos' : t.pct < 0 ? 'neg' : 'neu'}`;
+    barEl.style.width = Math.max(0, Math.min(100, 50 + t.pct * (50/30))) + '%';
+    barEl.className   = `trigger-bar ${t.status}`;
+  } else {
+    chgEl.textContent = '—'; chgEl.className = 'trigger-change neu';
+    barEl.style.width = '0%';
+  }
+}
+
+function triggerLabel(s) {
+  return { normal:'維持原速', accelerate:'加速', 'big-accelerate':'大加速', unknown:'等待資料' }[s] || s;
+}
+
+// ─────────────────────────────────────────────
+// RENDER: RECORDS
+// ─────────────────────────────────────────────
+function renderRecords() {
+  const avgs = getAvgPrices();
+  document.getElementById('s-0050-avg').textContent    = avgs.avg0050 ? fmtNum(avgs.avg0050) : '—';
+  document.getElementById('s-0050-shares').textContent = avgs.shares0050.toFixed(0);
+  document.getElementById('s-0050-cost').textContent   = `總成本 ${fmtTWD(avgs.cost0050TWD)}`;
+  document.getElementById('s-voo-avg').textContent     = avgs.avgVOO ? '$' + avgs.avgVOO.toFixed(2) : '—';
+  document.getElementById('s-voo-shares').textContent  = avgs.sharesVOO.toFixed(3);
+  document.getElementById('s-voo-cost').textContent    = `總成本 USD$${avgs.costVOOUSD.toFixed(2)}`;
+  const tbody = document.getElementById('records-tbody');
+  if (!state.records.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="es-icon">📋</div>尚無記錄，請新增第一筆定投</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = state.records.map((r,i) => `
+    <tr>
+      <td style="color:var(--text3)">${i+1}</td>
+      <td>${r.date}</td>
+      <td><span class="badge-trigger status-badge ${r.trigger}">${triggerLabel(r.trigger)}</span></td>
+      <td>${r.p0050 ? fmtNum(r.p0050) : '—'}</td>
+      <td>${r.s0050 || '—'}</td>
+      <td>${r.pvoo ? '$'+Number(r.pvoo).toFixed(2) : '—'}</td>
+      <td>${r.svoo || '—'}</td>
+      <td>${r.fx ? Number(r.fx).toFixed(2) : '—'}</td>
+      <td style="color:var(--gold)">${r.amount ? fmtTWD(r.amount) : '—'}</td>
+      <td><button class="td-del" onclick="deleteRecord('${r.id}')" title="刪除">✕</button></td>
+    </tr>`).join('');
+}
+
+// ─────────────────────────────────────────────
+// RENDER: JOURNAL
+// ─────────────────────────────────────────────
+function renderJournal() {
+  const list  = document.getElementById('journal-list');
+  const count = document.getElementById('journal-count');
+  count.textContent = state.journal.length ? `(${state.journal.length})` : '';
+  if (!state.journal.length) { list.innerHTML = '<div class="empty-state" id="journal-empty"><div class="es-icon">📓</div>尚無日記記錄</div>'; return; }
+  const moods = { bull:'📈 樂觀', neu:'📊 中性', bear:'📉 謹慎' };
+  list.innerHTML = state.journal.map(j => `
+    <div class="journal-entry">
+      <div class="je-header">
+        <div class="je-meta">
+          <span class="je-date">${j.date}</span>
+          <span class="je-mood ${j.mood}">${moods[j.mood]||j.mood}</span>
+        </div>
+        <button class="je-del" onclick="deleteJournal('${j.id}')" title="刪除">✕</button>
+      </div>
+      <div class="je-title">${escapeHtml(j.title)}</div>
+      ${j.content ? `<div class="je-content">${escapeHtml(j.content)}</div>` : ''}
+    </div>`).join('');
+}
+
+// ─────────────────────────────────────────────
+// CHARTS
+// ─────────────────────────────────────────────
+let overviewChart = null, monthlyChart = null;
+
+function initCharts() {
+  const base = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+    scales:{ x:{ ticks:{ color:'#5A5A78', font:{ family:'DM Mono', size:10 }, autoSkip:true, maxRotation:30 },
+      grid:{ color:'rgba(255,255,255,0.04)' }, border:{ color:'rgba(255,255,255,0.07)' } },
+    y:{ ticks:{ color:'#5A5A78', font:{ family:'DM Mono', size:10 } },
+      grid:{ color:'rgba(255,255,255,0.04)' }, border:{ color:'rgba(255,255,255,0.07)' } } } };
+
+  overviewChart = new Chart(document.getElementById('overviewChart'), {
+    data: { labels: [], datasets: [
+      { type:'bar',  label:'月投入(萬)', data:[], backgroundColor:[], borderColor:'#F0A500', borderWidth:1, yAxisID:'y' },
+      { type:'line', label:'0050均價',  data:[], borderColor:'#4ADE80', backgroundColor:'transparent', borderWidth:2, pointRadius:3, pointBackgroundColor:'#4ADE80', tension:.3, yAxisID:'y2' },
+      { type:'line', label:'VOO均價',   data:[], borderColor:'#60A5FA', backgroundColor:'transparent', borderWidth:2, pointRadius:3, pointBackgroundColor:'#60A5FA', tension:.3, yAxisID:'y2', borderDash:[4,3] }
+    ]},
+    options: { ...base, scales: { x: base.scales.x,
+      y:  { ...base.scales.y, position:'left',  title:{ display:true, text:'投入(萬)', color:'#5A5A78', font:{ size:10 } } },
+      y2: { ...base.scales.y, position:'right', grid:{ drawOnChartArea:false } } } }
+  });
+
+  monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+    type:'bar', data:{ labels:[], datasets:[{ label:'月投入', data:[], backgroundColor:[], borderColor:'#F0A500', borderWidth:1 }] },
+    options: base
+  });
+}
+
+function updateCharts() {
+  if (!overviewChart || !monthlyChart) return;
+  let c0=0,s0=0,cV=0,sV=0;
+  const labels=[],amounts=[],avg0=[],avgV=[],colors=[];
+  state.records.forEach(r => {
+    if (r.s0050&&r.p0050){c0+=r.s0050*r.p0050;s0+=r.s0050}
+    if (r.svoo &&r.pvoo) {cV+=r.svoo *r.pvoo; sV+=r.svoo }
+    labels.push(r.date.slice(0,7));
+    amounts.push(r.amount ? +(r.amount/10000).toFixed(1) : 0);
+    avg0.push(s0 ? +(c0/s0).toFixed(2) : null);
+    avgV.push(sV ? +(cV/sV).toFixed(2) : null);
+    colors.push(r.trigger==='big-accelerate'?'rgba(248,113,113,.5)':r.trigger==='accelerate'?'rgba(251,191,36,.5)':'rgba(240,165,0,.5)');
+  });
+  overviewChart.data.labels=labels;
+  overviewChart.data.datasets[0].data=amounts; overviewChart.data.datasets[0].backgroundColor=colors;
+  overviewChart.data.datasets[1].data=avg0;
+  overviewChart.data.datasets[2].data=avgV;
+  overviewChart.update('none');
+  monthlyChart.data.labels=labels;
+  monthlyChart.data.datasets[0].data=amounts; monthlyChart.data.datasets[0].backgroundColor=colors;
+  monthlyChart.update('none');
+}
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+function updateAll() { renderDashboard(); renderRecords(); renderJournal(); updateCharts(); }
+function fmtTWD(n) { return 'NT$' + Math.round(n).toLocaleString('zh-TW'); }
+function fmtNum(n)  { return n == null ? '—' : Number(n).toLocaleString('zh-TW',{ minimumFractionDigits:2, maximumFractionDigits:2 }); }
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showLoading(msg) { document.getElementById('loadingMsg').textContent = msg||'載入中…'; document.getElementById('loadingOverlay').classList.remove('hidden'); }
+function hideLoading()    { document.getElementById('loadingOverlay').classList.add('hidden'); }
+function toast(msg, type='') {
+  const wrap = document.getElementById('toastWrap');
+  const el   = document.createElement('div');
+  el.className = `toast ${type}`; el.textContent = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2800);
+}
+function toggleForm(which) {
+  document.getElementById(`${which}-form-body`).classList.toggle('open');
+  document.getElementById(`${which}-toggle`).classList.toggle('open');
+}
+
+// ─────────────────────────────────────────────
+// TAB NAVIGATION
+// ─────────────────────────────────────────────
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ─────────────────────────────────────────────
+// FORM HELPERS
+// ─────────────────────────────────────────────
+document.getElementById('f-p0050').addEventListener('focus', function() { if (!this.value && state.prices.tw0050) this.value = state.prices.tw0050.toFixed(2); });
+document.getElementById('f-pvoo').addEventListener('focus',  function() { if (!this.value && state.prices.voo)    this.value = state.prices.voo.toFixed(2); });
+document.getElementById('f-fx').addEventListener('focus',    function() { if (!this.value) this.value = state.config.defaultFX; });
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+async function init() {
+  // 1. 先從 localStorage 快取顯示，讓 UI 即時出現
+  loadLocalCache();
+  loadSettingsForm();
+  updateConnectedUI();
+  document.getElementById('f-date').value = todayStr();
+  document.getElementById('j-date').value = todayStr();
+  initCharts();
+  updateAll();
+
+  // 2. 如果有設定 Web App URL，從 Sheets 同步最新資料
+  if (getWebAppUrl()) {
+    setSyncStatus('syncing');
+    const data = await sheetsGet('getAll');
+    if (data && data.ok) {
+      state.records = (data.records || []).map(coerceRecord).sort((a,b) => new Date(a.date)-new Date(b.date));
+      state.journal = (data.journal || []).map(coerceJournal).sort((a,b) => new Date(b.date)-new Date(a.date));
+      if (data.config && typeof data.config === 'object') {
+        Object.entries(data.config).forEach(([k,v]) => { if (k !== 'webappUrl') state.config[k] = v; });
+      }
+      saveLocalCache();
+      loadSettingsForm();
+      updateAll();
+      setSyncStatus('synced');
+    } else { setSyncStatus('error'); }
+  }
+
+  // 3. 自動抓報價
+  setTimeout(fetchPrices, 1500);
+}
+
+init();
+</script>
+</body>
+</html>
